@@ -9,34 +9,34 @@ import fr.inria.midifileperformer.Midi;
 import fr.inria.midifileperformer.MidiMsg;
 
 public class MidiInputDevice extends InputDevice {
-    MidiDevice dev;
+	MidiDevice dev;
 
-    public MidiInputDevice(MidiDevice dev) {
-	this.dev = dev;
-    }
-    
-    public boolean same(InputDevice dev) {
-	if(dev instanceof MidiInputDevice) return(this.dev == ((MidiInputDevice) dev).dev);
-	return(false);
-    }
-
-    public void accept(LinkedBlockingQueue<MidiMsg> queue) {
-	try {
-	    Transmitter transmitter = dev.getTransmitter();
-	    dev.open();
-	    Midi.transmit(transmitter, queue);
-	} catch(Exception e) {
-	    return;
+	public MidiInputDevice(MidiDevice dev) {
+		this.dev = dev;
 	}
-    }
 
-    public void close() {
-	// When closing a MidiDevice we can't reopen it at all...
-	//System.out.println("Closing " + this);
-	//dev.close();
-    }
+	public boolean same(InputDevice dev) {
+		if(dev instanceof MidiInputDevice) return(this.dev == ((MidiInputDevice) dev).dev);
+		return(false);
+	}
 
-    public String toString() {
-	return(dev.getDeviceInfo().getName());
-    }
+	public void accept(LinkedBlockingQueue<MidiMsg> queue) {
+		try {
+			Transmitter transmitter = dev.getTransmitter();
+			dev.open();
+			Midi.transmit(transmitter, queue);
+		} catch(Exception e) {
+			return;
+		}
+	}
+
+	public void close() {
+		// When closing a MidiDevice we can't reopen it at all...
+		//System.out.println("Closing " + this);
+		//dev.close();
+	}
+
+	public String toString() {
+		return(dev.getDeviceInfo().getName());
+	}
 }

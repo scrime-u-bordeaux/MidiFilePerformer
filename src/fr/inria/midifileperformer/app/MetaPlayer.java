@@ -84,8 +84,8 @@ public class MetaPlayer extends Wrapper {
 				}),
 				Sos.pencolor(SosColor.red, console),
 				Sos.row(4, new Shape[] {
-						//Sos.label("Input : "),
-						Sos.popup("Input", () -> selectInput()),
+						Sos.label("Input : "),
+						//Sos.popup("Input", () -> selectInput()),
 						Sos.pencolor(SosColor.blue, input),
 						Sos.label("           Output : "),
 						Sos.pencolor(SosColor.blue, output),

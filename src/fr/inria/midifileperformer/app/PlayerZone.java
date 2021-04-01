@@ -14,23 +14,23 @@ import fr.inria.midifileperformer.MidiMsg;
 import fr.inria.midifileperformer.core.Event;
 
 public class PlayerZone extends Shape {
-    private LinkedBlockingQueue<MidiMsg> pool = null;
-    public LinkedBlockingQueue<Proc0> todo = new LinkedBlockingQueue<Proc0>();
-    Vector<Event<MidiMsg>> toSee = new Vector<Event<MidiMsg>>();
+	private LinkedBlockingQueue<MidiMsg> pool = null;
+	public LinkedBlockingQueue<Proc0> todo = new LinkedBlockingQueue<Proc0>();
+	Vector<Event<MidiMsg>> toSee = new Vector<Event<MidiMsg>>();
 
-    public PlayerZone(int w, int h) {
-	this.width = w;
-	this.height = h;
-	listen(SosMouse.enter, this, e -> picture.root.requestFocus());
-	//Sos.listen(SosMouse.down, this, e -> down());
-	//Sos.listen(SosMouse.up, this, e -> up());
-	Sos.listen(fr.inria.lognet.sos.Event.keyboard, this, e -> down());
-	Sos.listen(fr.inria.lognet.sos.Event.unkeyboard, this, e -> up());
-    }
+	public PlayerZone(int w, int h) {
+		this.width = w;
+		this.height = h;
+		listen(SosMouse.enter, this, e -> picture.root.requestFocus());
+		//Sos.listen(SosMouse.down, this, e -> down());
+		//Sos.listen(SosMouse.up, this, e -> up());
+		Sos.listen(fr.inria.lognet.sos.Event.keyboard, this, e -> down());
+		Sos.listen(fr.inria.lognet.sos.Event.unkeyboard, this, e -> up());
+	}
 
-    public void init(Picture p, Shape father) {
-	super.init(p, father);
-	/*
+	public void init(Picture p, Shape father) {
+		super.init(p, father);
+		/*
 	new Thread() {
 	    public void run() {
 		try {
@@ -40,46 +40,46 @@ public class PlayerZone extends Shape {
 		}
 	    }
 	}.start();
-	*/
-    }
-
-    void step() {
-    }
-
-    void down() {
-	try {
-	    int n = fr.inria.lognet.sos.Event.key;
-	    //System.out.println("key " + n);
-	    pool.put(MidiMsg.NoteOn(Math.min(n, 127), getVelocity()));
-	} catch (Exception e) {
-	    throw(new RuntimeException(e));
+		 */
 	}
-    }
 
-    void up() {
-	try {
-	    int n = fr.inria.lognet.sos.Event.key;
-	    //System.out.println("unkey " + n);
-	    pool.put(MidiMsg.NoteOff(Math.min(n, 127), getVelocity()));
-	} catch (Exception e) {
-	    throw(new RuntimeException(e));
+	void step() {
 	}
-    }
 
-    int getPitch() {
-	return(64);
-    }
+	void down() {
+		try {
+			int n = fr.inria.lognet.sos.Event.key;
+			//System.out.println("key " + n);
+			pool.put(MidiMsg.NoteOn(Math.min(n, 127), getVelocity()));
+		} catch (Exception e) {
+			throw(new RuntimeException(e));
+		}
+	}
 
-    int getVelocity() {
-	Line d = new Line(y, 128, y+height, 40);
-	return(d.iget(SosMouse.y));
-    }
+	void up() {
+		try {
+			int n = fr.inria.lognet.sos.Event.key;
+			//System.out.println("unkey " + n);
+			pool.put(MidiMsg.NoteOff(Math.min(n, 127), getVelocity()));
+		} catch (Exception e) {
+			throw(new RuntimeException(e));
+		}
+	}
 
-    public void repaint(int cx, int cy, int w, int h) {
-	Line lx = new Line(0, 10, 1, width-10);
-	Line ly = new Line(0, 10, 1, height-10);
-	picture.fillrectangle(SosColor.blue, x+lx.iget(Math.random()), y+ly.iget(Math.random()), 10, 10);
-	/*
+	int getPitch() {
+		return(64);
+	}
+
+	int getVelocity() {
+		Line d = new Line(y, 128, y+height, 40);
+		return(d.iget(SosMouse.y));
+	}
+
+	public void repaint(int cx, int cy, int w, int h) {
+		Line lx = new Line(0, 10, 1, width-10);
+		Line ly = new Line(0, 10, 1, height-10);
+		picture.fillrectangle(SosColor.blue, x+lx.iget(Math.random()), y+ly.iget(Math.random()), 10, 10);
+		/*
 	if(lastEvent != null) {
 	    long time = lastEvent.time;
 	    MidiMsg msg = lastEvent.value;
@@ -91,27 +91,27 @@ public class PlayerZone extends Shape {
 	    }
 	    //int dx = (int) (lastEvent.time % width);
 	}
-	*/
-	//picture.root.FullRepaint();
-    }
+		 */
+		//picture.root.FullRepaint();
+	}
 
-    /*
-     * Use it as an Input Device
-     */
-    public void accept(LinkedBlockingQueue<MidiMsg> queue) {
-	pool = queue;
-    }
+	/*
+	 * Use it as an Input Device
+	 */
+	public void accept(LinkedBlockingQueue<MidiMsg> queue) {
+		pool = queue;
+	}
 
-    public void close() {
-    }
+	public void close() {
+	}
 
-    /*
-     * Use it as an Output Device
-     */
-    public void display(Event<MidiMsg> event) {
-	
-	//System.out.println("receive " + event);
-	//lastEvent = event;
-	dirty();
-    }
+	/*
+	 * Use it as an Output Device
+	 */
+	public void display(Event<MidiMsg> event) {
+
+		//System.out.println("receive " + event);
+		//lastEvent = event;
+		dirty();
+	}
 }
