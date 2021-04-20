@@ -1,6 +1,7 @@
 package fr.inria.midifileperformer.app;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FilenameFilter;
 import java.util.Vector;
 
@@ -12,20 +13,18 @@ import fr.inria.lognet.sos.SosColor;
 import fr.inria.lognet.sos.event.SosMouse;
 import fr.inria.lognet.sos.shape.Label;
 import fr.inria.lognet.sos.shape.Wrapper;
-import fr.inria.midifileperformer.Lib;
-import fr.inria.midifileperformer.Midi;
-import fr.inria.midifileperformer.MidiMsg;
-import fr.inria.midifileperformer.SimpleMidiFile;
 import fr.inria.midifileperformer.core.C;
 import fr.inria.midifileperformer.core.Consumer;
 import fr.inria.midifileperformer.core.Event;
 import fr.inria.midifileperformer.core.Record;
-import fr.inria.midifileperformer.core.Rendering;
+import fr.inria.midifileperformer.impl.Config;
+import fr.inria.midifileperformer.impl.InputDevice;
+import fr.inria.midifileperformer.impl.MidiMsg;
+import fr.inria.midifileperformer.impl.MidiRendering;
+import fr.inria.midifileperformer.impl.OutputDevice;
 
 public class MetaPlayer extends Wrapper {
-	static String demoSong = "Internal demo song";
-	static String configName = "MidiFilePlayer.cfg";
-	Vector<String> filenames;
+	private Vector<String> filenamesJustFugace;
 	Label console = Sos.label("Welcome");
 	Label file = Sos.label("filetoplay");
 	Label input = Sos.label("input");
@@ -33,11 +32,11 @@ public class MetaPlayer extends Wrapper {
 	Label start = Sos.label("     ");
 	Label step = Sos.label ("     ");
 	Label stop = Sos.label ("     ");
-	PlayerZone playerZone = new PlayerZone(600, 400);
+	PlayerZone playerZone = new PlayerZone(600, 400, this);
 	Thread player = null;
 	Record<MidiMsg> record;
 
-	PlayerConfig config;
+	Config config;
 
 	public static void main(String[] args) {
 		if(args.length == 0) args = inDir();
@@ -63,14 +62,13 @@ public class MetaPlayer extends Wrapper {
 
 	public void init(Picture p, Shape father) {
 		super.init(p, father);
-		makeConfig(filenames);
-		configChanged();
+		// Must be done after awt setup
+		makeConfig(filenamesJustFugace);
 		Sos.listen(fr.inria.lognet.sos.Event.quit, picture.root.shape, e -> System.exit(0));
 	}
 
 	public MetaPlayer(Vector<String> filenames) {
-		this.filenames = filenames;
-		filenames.add(demoSong);
+		this.filenamesJustFugace = filenames;
 		Sos.listen(SosMouse.up, file, e -> popup(new ChangeFileName(this), "change input file"));
 		Sos.listen(SosMouse.up, input, e -> changeInput());
 		Sos.listen(SosMouse.up, output, e -> popup(new ChangeOutput(this), "change output"));
@@ -142,7 +140,7 @@ public class MetaPlayer extends Wrapper {
 	}
 
 	Vector<Event<MidiMsg>> src() {
-		C<MidiMsg> cin = readAndFilter(config.filename);
+		C<MidiMsg> cin = MidiRendering.readAndFilter(config, config.filename);
 		Record<MidiMsg> rin = new Record<MidiMsg>(cin);
 		rin.force();
 		return(rin.recorded);
@@ -156,19 +154,42 @@ public class MetaPlayer extends Wrapper {
 		Sos.frame(Sos.border(20, s), 100, 20, header);
 	}
 
+	void expert() {
+		Expert a = new Expert(this, config);
+		Sos.frame(Sos.border(20, a), 100, 20, "Advanced options");
+	}
+
+	void showTime(long time) {
+		//System.out.println("SHOWTIME");
+		step.reset(""+time);
+		// this repaint doesn't return when input == PlayerZone && ouput != Midi
+		//picture.root.FullRepaint();
+		//System.out.println("SHOWED");
+	}
+
+	/*
+	 * config utilisation
+	 */
+
+	void makeConfig(Vector<String> filenames) {
+		config = new Config(filenames);
+		restoreConfig();
+	}
+
 	void saveConfig() {
-		File file = new File(System.getProperty("user.home"), configName);
 		try {
-			config.saveConfig(file);
+			config.saveConfig();
 		} catch (Exception e) {
 			console.reset("Error when saving config " + e);
 		}
 	}
 
 	void restoreConfig() {
-		File file = new File(System.getProperty("user.home"), configName);
 		try {
-			config.restoreConfig(playerZone, file);
+			config.restoreConfig();
+		} catch (FileNotFoundException e) {
+			config.addInput(PlayerInputDevice.myName);
+			config.addOutput(PlayerOutputDevice.myName);
 		} catch (Exception e) {
 			console.reset("Error when restoring config " + e);
 		}
@@ -196,90 +217,10 @@ public class MetaPlayer extends Wrapper {
 					n + " outputs selected" );
 		start.reset(""+config.start);
 		stop.reset(""+config.stop);
-		C<MidiMsg> cin;
-		if(config.loop) {
-			cin = C.loop(() -> readAndFilter(config.filename));
-		} else {
-			cin = readAndFilter(config.filename);
-		}
-		C<Vector<MidiMsg>> acin = Lib.stdAnalysis(cin, config.unmeet);
-		// this make potential Thread conflict
-		C<Vector<MidiMsg>> partition = Lib.trace(acin, e -> showTime(e.time));
-		C<MidiMsg> control = C.collector(config.inputs);
-		C<Vector<MidiMsg>> renderingResult = Rendering.mergeBeginEnd(partition, control, Lib.toVector(MidiMsg.merge));
-		C<MidiMsg> linear = C.unfold(renderingResult);
+		C<MidiMsg> linear = MidiRendering.launch(config, t -> showTime(t));
 		Record<MidiMsg> record = Record.make(linear);
 		this.record = record;
-		player = launchPlayer(config.outputs, record);
-	}
-
-	C<MidiMsg> readAndFilter(String filename) {
-		C<MidiMsg> r1 = readfile(config.filename).filter(e -> midiFilter(e)); 
-		return(C.make(MidiMsg.allNotesOff, 0).seq(r1));
-	}
-	//Vector<MidiMsg> v = MidiMsg.allNotesOff;
-	//for(int i=0; i<v.size(); i++) r.add(Event.make(0, v.get(i)));
-
-	boolean midiFilter(Event<MidiMsg> e) {
-		if(e.time < config.start) return(false);
-		if(e.value.isPedal() && !config.keepPedal) return(false);
-		if(e.value.changeTempo() != -1 && !config.keepTempo) return(false);
-		if(config.stop < 0) return(true);
-		return(e.time < config.stop);
-	}
-
-	C<MidiMsg> readfile(String filename) {
-		if(filename.compareTo(demoSong) == 0) return(SimpleMidiFile.demo());
-		try {
-			return(Midi.readMidi(filename));
-		} catch(Exception e) {
-			try {
-				return(SimpleMidiFile.read(filename));
-			} catch(Exception ee) {
-				console.reset("connot read file - use a demo instead");
-				return(SimpleMidiFile.demo());
-			}
-		}
-	}
-
-	public static Thread launchPlayer(Vector<OutputDevice> outputs, C<MidiMsg> toPlay) {
-		Thread player = new Thread() {
-			public void run() {
-				try {
-					for(OutputDevice dev : outputs) dev.open();
-					toPlay.distribute(outputs);
-				} catch (Exception e) {
-				}
-			}
-		};
-		player.start();
-		return(player);
-	}
-
-	void showTime(long time) {
-		//System.out.println("SHOWTIME");
-		step.reset(""+time);
-		// this repaint doesn't return when input == PlayerZone && ouput != Midi
-		//picture.root.FullRepaint();
-		//System.out.println("SHOWED");
-	}
-
-	/*
-	 * config utilisation
-	 */
-
-	void expert() {
-		Expert a = new Expert(this, config);
-		Sos.frame(Sos.border(20, a), 100, 20, "Advanced options");
-	}
-
-	void makeConfig(Vector<String> filenames) {
-		config = new PlayerConfig();
-		config.filenames = filenames;
-		config.filename = filenames.get(0);
-		config.inputs = Vecteur.sing(new PlayerInputDevice(playerZone));
-		OutputDevice tmp = new PlayerOutputDevice(playerZone);
-		config.outputs = Vecteur.sing(tmp);
+		player = MidiRendering.launchPlayer(config.outputs, record);
 	}
 
 	public Vector<InputDevice> standardInputDevice() {

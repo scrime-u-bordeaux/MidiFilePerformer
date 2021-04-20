@@ -2,14 +2,12 @@ package fr.inria.midifileperformer.app;
 
 import java.util.Vector;
 
-import javax.sound.midi.MidiDevice;
-import javax.sound.midi.MidiSystem;
-
 import fr.inria.lognet.sos.Shape;
 import fr.inria.lognet.sos.Sos;
 import fr.inria.lognet.sos.SosColor;
 import fr.inria.lognet.sos.event.SelectEvent;
 import fr.inria.lognet.sos.shape.Slicer;
+import fr.inria.midifileperformer.impl.OutputDevice;
 
 public class ChangeOutput extends ChangeConfig {
 	Slicer selectable;
@@ -67,34 +65,10 @@ public class ChangeOutput extends ChangeConfig {
 
 	Vector<OutputDevice> others(Vector<OutputDevice> done) {
 		Vector<OutputDevice> r = new Vector<OutputDevice>();
-		for(OutputDevice dev : master.standardOutputDevice()) {
-			if(!done.contains(dev)) r.add(dev);
-		}
-		MidiDevice.Info[] infos = MidiSystem.getMidiDeviceInfo();
-		for(int i=0; i<infos.length; i++) {
-			try {
-				MidiDevice md = MidiSystem.getMidiDevice(infos[i]);
-				if(md.getMaxReceivers() != 0) {
-					OutputDevice dev = new MidiOutputDevice(md);
-					if(!done.contains(dev)) r.add(dev);
-				}
-			} catch(Exception e) {}
+		for( OutputDevice dev : OutputDevice.all() ) {
+			if(!done.contains(dev)) r.add(dev);		
 		}
 		return(r);
-	}
-
-	public static OutputDevice byName(String name) {
-		MidiDevice.Info[] infos = MidiSystem.getMidiDeviceInfo();
-		for(int i=0; i<infos.length; i++) {
-			try {
-				MidiDevice md = MidiSystem.getMidiDevice(infos[i]);
-				if(md.getMaxReceivers() != 0) {
-					if(md.getDeviceInfo().getName().equals(name))
-						return(new MidiOutputDevice(md));
-				}
-			} catch(Exception e) {}
-		}
-		return(null);
 	}
 }
 

@@ -4,8 +4,12 @@ import java.util.Vector;
 
 import fr.inria.bps.base.Mains;
 import fr.inria.midifileperformer.core.C;
+import fr.inria.midifileperformer.core.EndOfStream;
 import fr.inria.midifileperformer.core.Event;
 import fr.inria.midifileperformer.core.Rendering;
+import fr.inria.midifileperformer.impl.Midi;
+import fr.inria.midifileperformer.impl.MidiMsg;
+import fr.inria.midifileperformer.impl.StringInterval;
 
 public class Main {
 	public static void main(String[] args) {
@@ -67,15 +71,17 @@ public class Main {
 
 	public static void convertSimple(String filename) {
 		C<MidiMsg> c = Midi.readMidi(filename);
-		Event<MidiMsg> e = c.get();
-		while(e != null) {
-			MidiMsg m = e.value;
-			if(m.isBegin()) {
-				System.out.println(e.time + " " + MidiMsg.note(m.getKey()) + "-");
-			} else if(m.isEnd()) {
-				System.out.println(e.time + " " + MidiMsg.note(m.getKey()) + "+");
+		try {
+			while(true) {
+				Event<MidiMsg> e = c.get();
+				MidiMsg m = e.value;
+				if(m.isBegin()) {
+					System.out.println(e.time + " " + MidiMsg.note(m.getKey()) + "-");
+				} else if(m.isEnd()) {
+					System.out.println(e.time + " " + MidiMsg.note(m.getKey()) + "+");
+				}
 			}
-			e = c.get();
+		} catch (EndOfStream e) {
 		}
 	}
 

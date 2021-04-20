@@ -7,6 +7,7 @@ import java.io.InputStreamReader;
 import java.util.Vector;
 
 import fr.inria.midifileperformer.core.C;
+import fr.inria.midifileperformer.impl.MidiMsg;
 
 public class JeanHaury {
 	/* conversion vers Midi où les lignes sont numérotées de 2 en 2
@@ -25,7 +26,7 @@ public class JeanHaury {
 	 */
 
 	public static C<Vector<MidiMsg>> convert(C<Vector<JHStatus>> c) {
-		return(null);
+		throw(new RuntimeException("Not yet!"));
 	}
 
 	public static C<Vector<JHStatus>> read(String filename) {

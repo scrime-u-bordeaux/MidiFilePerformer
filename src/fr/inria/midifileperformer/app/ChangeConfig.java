@@ -4,10 +4,11 @@ import fr.inria.lognet.sos.Picture;
 import fr.inria.lognet.sos.Shape;
 import fr.inria.lognet.sos.Sos;
 import fr.inria.lognet.sos.shape.Wrapper;
+import fr.inria.midifileperformer.impl.Config;
 
 public abstract class ChangeConfig extends Wrapper {
 	MetaPlayer master;
-	PlayerConfig config;
+	Config config;
 	Shape header;
 
 	abstract void changeConfig();

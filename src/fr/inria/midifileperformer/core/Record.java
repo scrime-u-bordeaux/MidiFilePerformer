@@ -14,9 +14,8 @@ public class Record<T> extends C<T> {
 		return(new Record<T>(master));
 	}
 
-	public Event<T> get() {
+	public Event<T> get() throws EndOfStream {
 		Event<T> r = master.get();
-		if(r == null) return(null);
 		recorded.add(r);
 		return(r);
 	}

@@ -13,6 +13,8 @@ import fr.inria.midifileperformer.core.Event;
 import fr.inria.midifileperformer.core.Interval;
 import fr.inria.midifileperformer.core.Merger;
 import fr.inria.midifileperformer.core.SameEvent;
+import fr.inria.midifileperformer.impl.Midi;
+import fr.inria.midifileperformer.impl.MidiMsg;
 
 public class Lib {
 
@@ -38,7 +40,6 @@ public class Lib {
 				return(Vecteur.map(v, x -> merge.left(x)));
 			}
 			public Vector<T3> merge(Vector<T1> v, T2 v2) {
-				if(v == null) return(null);
 				return(Vecteur.map(v, x -> merge.merge(x, v2)));
 			}
 			public Vector<T3> right(T2 v2) {

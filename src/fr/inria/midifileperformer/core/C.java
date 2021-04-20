@@ -11,21 +11,14 @@ import fr.inria.midifileperformer.Lib;
 public abstract class C<T> extends S<Event<T>> {
 
 	/*
-	 * Generic Chronology construction based on functions
-	 */
-	public static <T> C<T> make(Fun0<Event<T>> get) {
-		return(new C<T>() {
-			public Event<T> get() {
-				return(get.operation());
-			};
-		});
-	}
-
-	/*
 	 * The empty chronology 
 	 */
 	public static <T> C<T> NULL() {
-		return(make(() -> null));
+		return(new C<T>() {
+			public Event<T> get() throws EndOfStream {
+				throw(new EndOfStream("The empty stream"));
+			};
+		});
 	}
 
 	/*
@@ -41,13 +34,13 @@ public abstract class C<T> extends S<Event<T>> {
 	}
 
 	/*
-	 * Convert a vector of event to a PeekChronology
+	 * Convert a vector of event to a Chronology
 	 */
 	public static <T> C<T> make(Vector<Event<T>> events) {
 		return(new C<T>() {
 			int i=0;
-			public Event<T> get() {
-				if(i >= events.size()) return(null);
+			public Event<T> get() throws EndOfStream {
+				if(i >= events.size()) throw(new EndOfStream("End of data"));
 				return(events.get(i++));
 			}
 		});
@@ -56,8 +49,8 @@ public abstract class C<T> extends S<Event<T>> {
 	public static <T> C<T> make(Vector<T> values, int delay) {
 		return(new C<T>() {
 			int i=0;
-			public Event<T> get() {
-				if(i >= values.size()) return(null);
+			public Event<T> get() throws EndOfStream {
+				if(i >= values.size()) throw(new EndOfStream("End of data"));
 				return(Event.make(i*delay, values.get(i++)));
 			}
 		});
@@ -76,11 +69,13 @@ public abstract class C<T> extends S<Event<T>> {
 	 * Distribute
 	 */
 	public <T1 extends Consumer<Event<T>>> void distribute(Vector<T1> outputs) {
-		Event<T> event = get();
-		while(event != null) {
-			for(Consumer<Event<T>> cons : outputs)
-				cons.accept(event);
-			event = get();
+		try {
+			while(true) {
+				Event<T> event = get();
+				for(Consumer<Event<T>> cons : outputs)
+					cons.accept(event);
+			}
+		} catch (EndOfStream e) {
 		}
 	}
 
@@ -92,15 +87,16 @@ public abstract class C<T> extends S<Event<T>> {
 		C<T> me = this; 
 		return(new C<T>() {
 			boolean left = true;
-			public Event<T> get() {
+			public Event<T> get() throws EndOfStream  {
 				if(left) {
-					Event<T> v = me.get();
-					if(v != null) return(v);
-					left = false;
+					try {
+						return(me.get());
+					} catch (EndOfStream e) {
+						left = false;
+						return(c.get());
+					}
 				}
-				Event<T> v2 = c.get();
-				if(v2 == null) return(null);
-				return(v2);
+				return(c.get());
 			}
 		});
 	}
@@ -111,10 +107,8 @@ public abstract class C<T> extends S<Event<T>> {
 	public <T2> C<T2> map(Fun1<Event<T>,Event<T2>> f) {
 		C<T> me = this; 
 		return(new C<T2>() {
-			public Event<T2> get() {
-				Event<T> v = me.get();
-				if(v == null) return(null);
-				return(f.operation(v));
+			public Event<T2> get() throws EndOfStream {
+				return(f.operation(me.get()));
 			}
 		});
 	}
@@ -125,9 +119,9 @@ public abstract class C<T> extends S<Event<T>> {
 	public C<T> filter(Fun1<Event<T>,Boolean> filter) {
 		C<T> me = this; 
 		return(new C<T>() {
-			public Event<T> get() {
+			public Event<T> get() throws EndOfStream {
 				Event<T> r = me.get();
-				while((r != null) && !(filter.operation(r))) r = me.get();
+				while(!(filter.operation(r))) r = me.get();
 				return(r);
 			};
 		});
@@ -136,20 +130,21 @@ public abstract class C<T> extends S<Event<T>> {
 	/*
 	 * folding
 	 */
-	public C<Vector<T>> fold(Fun3<Long, Vector<T>,
-							 Event<T>,Boolean> insert) {
+	public C<Vector<T>> fold(Fun3<Long, Vector<T>, Event<T>,Boolean> insert) {
 		Peek<T> me = new Peek<T>(this);
 		return(new C<Vector<T>>() {
-			public Event<Vector<T>> get() {
+			public Event<Vector<T>> get() throws EndOfStream  {
 				Vector<T> r = new Vector<T>();
 				Event<T> event = me.peek();
-				if(event == null) return(null);
 				long time = event.time;
-				while(event != null && insert.operation(time, r, event)) {
-					me.get();
-					time = event.time;
-					r.add(event.value);
-					event = me.peek();
+				try {
+					while(insert.operation(time, r, event)) {
+						time = event.time;
+						r.add(event.value);
+						me.get();
+						event = me.peek();
+					}
+				} catch (EndOfStream e) {
 				}
 				return(Event.make(time, r));
 			}
@@ -169,11 +164,9 @@ public abstract class C<T> extends S<Event<T>> {
 	public C<Pair<T,T>> pair() {
 		C<T> me = this;
 		return(new C<Pair<T,T>>() {
-			public Event<Pair<T,T>> get() {
+			public Event<Pair<T,T>> get() throws EndOfStream {
 				Event<T> car = me.get();
-				if(car == null) return(null);
 				Event<T> cdr = me.get();
-				if(cdr == null) return(Event.make(car.time, Pair.cons(car.value, null)));
 				return(Event.make(car.time, Pair.cons(car.value, cdr.value)));
 			}
 		});
@@ -187,10 +180,9 @@ public abstract class C<T> extends S<Event<T>> {
 			Vector<T> slice = new Vector<T>();
 			long time;
 			int i = 0;
-			public Event<T> get() {
+			public Event<T> get() throws EndOfStream {
 				while(i >= slice.size()) {
 					Event<Vector<T>> e = c.get();
-					if(e == null) return(null);
 					time = e.time;
 					slice = e.value;
 					i = 0;
@@ -206,14 +198,15 @@ public abstract class C<T> extends S<Event<T>> {
 	public static <T> C<T> loop(Fun0<C<T>> gen) {
 		return(new C<T>() {
 			C<T> current = gen.operation();
-			public Event<T> get() {
-				Event<T> e = current.get();
-				while(e == null) {
-					current = gen.operation();
-					if(current == null) return(null);
-					e = current.get();
+			public Event<T> get() throws EndOfStream {
+				while(current != null) {
+					try {
+						return(current.get());
+					} catch (EndOfStream e) {
+						current = gen.operation();
+					}
 				}
-				return(e);
+				throw(new EndOfStream("end of loop"));
 			};
 		});
 	}
@@ -227,7 +220,7 @@ public abstract class C<T> extends S<Event<T>> {
 			boolean init = false;
 			boolean toggle = false;
 			long lastOn = -1;
-			public Event<Vector<T>> get() {
+			public Event<Vector<T>> get() throws EndOfStream {
 				if(!init) {
 					init = true;
 					// force a first event to be without Begin
@@ -237,7 +230,6 @@ public abstract class C<T> extends S<Event<T>> {
 				toggle = !toggle;
 				if(toggle) {
 					Event<Vector<T>> event = pc.get();
-					if(event == null) return(null);
 					lastOn = event.time;
 					return(event);
 				} else {
@@ -246,22 +238,23 @@ public abstract class C<T> extends S<Event<T>> {
 			}
 			Event<Vector<T>> collectToBegin() {
 				Vector<T> r = new Vector<T>();
-				long time = -1;
-				Event<Vector<T>> e = pc.peek();
-				while(e!=null && (!Core.hasBegin(e.value))) {
-					pc.get();
-					time = e.time;
-					r.addAll(e.value);
-					e = pc.peek();
-				}
-				if(time == -1) {
-					if(e == null) {
-						time = lastOn + 1;
-					} else {
-						time = e.time - 1;
+				try {
+					Event<Vector<T>> ev = pc.peek();
+					long time = -1;
+					try {
+						while(!Interval.hasBegin(ev.value)) {
+							time = ev.time;
+							pc.get();
+							r.addAll(ev.value);
+							ev = pc.peek();
+						}
+					} catch (EndOfStream e) {
 					}
+					if(time == -1) time = ev.time-1;
+					return(Event.make(time, r));
+				} catch (EndOfStream e) {
+					return(Event.make(lastOn+1, r));
 				}
-				return(Event.make(time, r));
 			}
 		});
 	}
@@ -274,18 +267,20 @@ public abstract class C<T> extends S<Event<T>> {
 		return(new C<Vector<T>>() {
 			boolean toggle = true;
 			Vector<T> lastBegin = null;
-			public Event<Vector<T>> get() {
+			public Event<Vector<T>> get() throws EndOfStream {
 				Event<Vector<T>> event = c.get();
-				if(event == null) return(null);
 				toggle = !toggle;
 				if(toggle) {
 					lastBegin = event.value;
 					return(event);
 				}
-				Event<Vector<T>> nextBegin = c.peek();
-				if(nextBegin == null) return(event);
-				if(lastBegin != null)
-					filterX(event.value, nextBegin.value);
+				try {
+					Event<Vector<T>> nextBegin = c.peek();
+					if(nextBegin == null) return(event);
+					if(lastBegin != null)
+						filterX(event.value, nextBegin.value);
+				} catch (EndOfStream e) {
+				}
 				return(event);
 			}
 			void filterX(Vector<T> E, Vector<T> nextB) {

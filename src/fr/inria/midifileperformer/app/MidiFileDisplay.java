@@ -17,8 +17,8 @@ import fr.inria.lognet.sos.event.SelectEvent;
 import fr.inria.lognet.sos.shape.Label;
 import fr.inria.lognet.sos.shape.Slicer;
 import fr.inria.lognet.sos.shape.Wrapper;
-import fr.inria.midifileperformer.Midi;
-import fr.inria.midifileperformer.MidiMsg;
+import fr.inria.midifileperformer.impl.Midi;
+import fr.inria.midifileperformer.impl.MidiMsg;
 
 public class MidiFileDisplay extends Wrapper {
 	Label trackSize;

@@ -11,9 +11,10 @@ import javax.sound.midi.Track;
 import fr.inria.lognet.sos.Shape;
 import fr.inria.lognet.sos.Sos;
 import fr.inria.lognet.sos.shape.Wrapper;
-import fr.inria.midifileperformer.MidiMsg;
 import fr.inria.midifileperformer.core.C;
 import fr.inria.midifileperformer.core.Event;
+import fr.inria.midifileperformer.impl.MidiMsg;
+import fr.inria.midifileperformer.impl.MidiRendering;
 
 public class MidiPlayer extends Wrapper {
 	MetaPlayer master;
@@ -37,7 +38,7 @@ public class MidiPlayer extends Wrapper {
 	}
 
 	void play(Vector<Event<MidiMsg>> v) {
-		player = MetaPlayer.launchPlayer(master.config.outputs, C.make(v));
+		player = MidiRendering.launchPlayer(master.config.outputs, C.make(v));
 	}
 
 	void stop() {

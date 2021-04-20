@@ -3,28 +3,45 @@ package fr.inria.midifileperformer;
 import java.util.Vector;
 
 import fr.inria.fun.Fun0;
+import fr.inria.fun.Fun1;
 import fr.inria.fun.Fun2;
+import fr.inria.fun.Fun3;
 import fr.inria.midifileperformer.core.C;
+import fr.inria.midifileperformer.core.Consumer;
+import fr.inria.midifileperformer.core.EndOfStream;
 import fr.inria.midifileperformer.core.Event;
 import fr.inria.midifileperformer.core.Peek;
+import fr.inria.midifileperformer.impl.StringInterval;
 
-public class Check {
+public class Check extends RuntimeException {
+	private static final long serialVersionUID = 1L;
+	public static boolean verbose = false;
+	public static boolean exitOnFirstError = true;
+	
 	public static void main(String[] args) {
 		//Mains.launch(new Check(), args, 0);
-		checkAll();
+		try {
+			checkAll();
+		} catch (Check e) {
+		}
 	}
 
 	public static void checkAll() {
-		checkBasics();
+		checkDistributes();
+		checkSeqs();
 		checkMaps();
 		checkDelays();
 		checkFilters();
 		checkFolds();
 		checkSyncs();
 		checkUnfolds();
+		checkloop();
+		checkCompresss();
+		checkUnmeets();
 	}
 
 	static C<StringInterval> reads(String s) {
+		if(s=="") return(C.NULL());
 		String[] lines = s.split("\t");
 		int n = lines.length;
 		Vector<Event<StringInterval>> r = new Vector<Event<StringInterval>>(n);
@@ -41,6 +58,7 @@ public class Check {
 	}
 
 	static C<Vector<StringInterval>> readv(String s) {
+		if(s=="") return(C.NULL());
 		String[] lines = s.split("\t");
 		int n = lines.length;
 		Vector<Event<Vector<StringInterval>>> r = new Vector<Event<Vector<StringInterval>>>(n);
@@ -60,29 +78,39 @@ public class Check {
 
 	static <T> void check(String test, C<T> c1, C<T> c2, Fun2<T,T,Boolean> cmp) {
 		int i = 0;
-		Event<T> ev1 = c1.get();
-		Event<T> ev2 = c2.get();
-		while(ev1 != null &&  ev2 != null) {
+		if(verbose) System.out.println("-- checking " + test);
+		while(true) {
+			Event<T> ev1;
+			Event<T> ev2;
+			try {
+				ev1 = c1.get();
+			} catch (EndOfStream e1) {
+				try {
+					ev2 = c2.get();
+				} catch (EndOfStream e2) {
+					return;
+				}
+				fail(test, "not enought values", i, ev2, null);
+				return;
+			}
+			try {
+				ev2 = c2.get();
+			} catch (EndOfStream e2) {
+				fail(test, "too more values", i, ev1, null);
+				return;
+			}
 			if((ev1.time != ev2.time) || !cmp.operation(ev1.value, ev2.value)) {
-				System.out.println("test \"" + test + "\" failed at index " + i);
-				System.out.println("\tnot same event " + ev1 + " vs " + ev2);
+				fail(test, "not same event", i, ev1, ev2);
 			}
 			i++;
-			ev1 = c1.get();
-			ev2 = c2.get();
-		}
-		if(ev2 != null) {
-			System.out.println("test \"" + test + "\" failed at index " + i);
-			System.out.println("not enought values : need at least " + ev2);
-		}
-		if(ev1 != null) {
-			System.out.println("test \"" + test + "\" failed at index " + i);
-			System.out.println("to omore values : at least " + ev1);
 		}
 	}
-
-	static <T> void check(int test, C<T> c1, C<T> c2, Fun2<T,T,Boolean> cmp) {
-		check(""+test, c1, c2, cmp);
+	
+	static <T> void fail(String test, String msg, int i, Event<T> ev1, Event<T> ev2) {
+		System.out.println("test \"" + test + "\" failed at index " + i + " : " + msg);
+		System.out.println("\tcomputed :\t" + ev1);
+		System.out.println("\tmust be :\t" + ev2);
+		if(exitOnFirstError) throw(new Check());
 	}
 
 	static Fun2<StringInterval,StringInterval,Boolean> cmps = new Fun2<StringInterval,StringInterval,Boolean>() {
@@ -136,6 +164,69 @@ public class Check {
 		C<Vector<StringInterval>> r = readv("0 a b\t2 c");
 		check("Basic 3 readv multiple variable", done, r, cmpv);
 	}
+	
+	/*
+	 * Distribute
+	 */
+	public static void checkDistributes() {
+		checkDistribute_0();
+	}
+	
+	public static void checkDistribute_0() {
+		C<StringInterval> src = reads("0 a\t1 b\t2 c");
+		Vector<Consumer<Event<StringInterval>>> cons = new Vector<Consumer<Event<StringInterval>>>(2);
+		Vector<Event<StringInterval>> v = new Vector<Event<StringInterval>>(6);
+		cons.add(Consumer.fun(e -> v.add(e)));
+		cons.add(Consumer.fun(e -> v.add(Event.make(e.time+10,StringInterval.META))));
+		src.distribute(cons);
+		src.force();
+		C<StringInterval> done = C.make(v);
+		C<StringInterval> r = reads("0 a\t10 META\t1 b\t11 META\t2 c\t12 META");		
+		check("Distribute 0 duo", done, r, cmps);
+	}
+	
+	/*
+	 * Seq
+	 */
+	public static void checkSeqs() {
+		checkSeq_0();
+		checkSeq_1();
+		checkSeq_2();
+		checkSeq_3();
+	}
+	
+	public static void checkSeq_0() {
+		C<StringInterval> src1 = reads("0 a\t1 b");
+		C<StringInterval> src2 = reads("2 c\t3 d");
+		C<StringInterval> done = src1.seq(src2);
+		C<StringInterval> r = reads("0 a\t1 b\t2 c\t3 d");		
+		check("Seq 0 simple", done, r, cmps);
+	}
+	
+	public static void checkSeq_1() {
+		C<StringInterval> src1 = C.NULL();
+		C<StringInterval> src2 = reads("2 c\t3 d");
+		C<StringInterval> done = src1.seq(src2);
+		C<StringInterval> r = reads("2 c\t3 d");		
+		check("Seq 1 NULL left", done, r, cmps);
+	}
+	
+	public static void checkSeq_2() {
+		C<StringInterval> src1 = reads("0 a\t1 b");
+		C<StringInterval> src2 = C.NULL();
+		C<StringInterval> done = src1.seq(src2);
+		C<StringInterval> r = reads("0 a\t1 b");		
+		check("Seq 2 NULL right", done, r, cmps);
+	}
+	
+	public static void checkSeq_3() {
+		C<StringInterval> src1 = reads("0 a\t1 b");
+		C<StringInterval> src2 = C.NULL();
+		C<StringInterval> src3 = reads("2 c\t3 d");
+		C<StringInterval> done = src1.seq(src2).seq(src3);
+		C<StringInterval> r = reads("0 a\t1 b\t2 c\t3 d");		
+		check("Seq 2 NULL mid", done, r, cmps);
+	}
 
 	/*
 	 * Map
@@ -181,141 +272,72 @@ public class Check {
 	/*
 	 * filter
 	 */
+	static void checkFilter(String from, String to, 
+			Fun1<Event<StringInterval>,Boolean> f) {
+		C<StringInterval> src = reads(from);
+		C<StringInterval> done = src.filter(f);
+		C<StringInterval> r = reads(to);
+		check("filter " + from, done, r, cmps);
+	}
+
 	public static void checkFilters() {
-		checkFilter_0();
-		checkFilter_1();
-		checkFilter_2();
-		checkFilter_3();
+		checkFilter("0 a\t1 b\t2 c", "1 b", e -> (e.time == 1));
+		checkFilter("0 a\t1 b\t2 c", "0 a\t1 b", e -> (e.time <= 1));
+		checkFilter("0 a\t1 b\t2 c", "", e -> false);
+		checkFilter("0 a-\t1 b+\t2 c-", "1 b+", e -> e.value.isEnd());
 	}
-
-	public static void checkFilter_0() {
-		C<StringInterval> src = reads("0 a\t1 b\t2 c");
-		C<StringInterval> done = src.filter(e -> (e.time == 1));
-		C<StringInterval> r = reads("1 b");
-		check("Filter 0 time", done, r, cmps);
-	}
-	public static void checkFilter_1() {
-		C<StringInterval> src = reads("0 a\t1 b\t2 c");
-		C<StringInterval> done = src.filter(e -> (e.time <= 1));
-		C<StringInterval> r = reads("0 a\t1 b");
-		check("Filter 1 time range", done, r, cmps);
-	}
-	public static void checkFilter_2() {
-		C<StringInterval> src = reads("0 a\t1 b\t2 c");
-		C<StringInterval> done = src.filter(e -> false);
-		C<StringInterval> r = C.NULL();
-		check("Filter 2 all", done, r, cmps);
-	}
-	public static void checkFilter_3() {
-		C<StringInterval> src = reads("0 a-\t1 b+\t2 c-");
-		C<StringInterval> done = src.filter(e -> e.value.isEnd());
-		C<StringInterval> r = reads("1 b+");
-		check("Filter 3 value", done, r, cmps);
-	}
-
 
 	/*
 	 * fold
 	 */
-	public static void checkFolds() {
-		checkFold_0();
-		checkFold_1();
-		checkFold_2();
+	static void checkFold(String from, String to, 
+			Fun3<Long, Vector<StringInterval>, Event<StringInterval>, Boolean> f) {
+		C<StringInterval> src = reads(from);
+		C<Vector<StringInterval>> done = src.fold(f);
+		C<Vector<StringInterval>> r = readv(to);
+		check("fold " + from, done, r, cmpv);
 	}
 
-	public static void checkFold_0() {
-		C<StringInterval> src = reads("0 a\t1 b\t2 c");
-		C<Vector<StringInterval>> done = src.fold((t,v,e) -> true);
-		C<Vector<StringInterval>> r = readv("2 a b c");
-		check("Fold 0 all", done, r, cmpv);
-	}
-	public static void checkFold_1() {
-		C<StringInterval> src = reads("0 a\t1 b\t2 c");
-		C<Vector<StringInterval>> done = src.fold((t,v,e) -> e.time <= 1 || v.size() == 0);
-		C<Vector<StringInterval>> r = readv("1 a b\t2 c");
-		check("Fold 1 firsts", done, r, cmpv);
-	}
-	public static void checkFold_2() {
-		C<StringInterval> src = reads("0 a\t1 b\t2 c\t3 d\t4 e");
-		C<Vector<StringInterval>> done = src.fold((t,v,e) -> v.size() < 2);
-		C<Vector<StringInterval>> r = readv("1 a b\t3 c d\t4 e");
-		check("Fold 2 slice", done, r, cmpv);
+	public static void checkFolds() {
+		checkFold("0 a\t1 b\t2 c", "2 a b c", (t,v,e) -> true);
+		checkFold("0 a\t1 b\t2 c", "1 a b\t2 c", (t,v,e) -> e.time <= 1 || v.size() == 0);
+		checkFold("0 a\t1 b\t2 c\t3 d\t4 e", "1 a b\t3 c d\t4 e", (t,v,e) -> v.size() < 2);
 	}
 
 	/*
 	 * Sync
 	 */
+	static void checkSync(String from, String to) {
+		C<StringInterval> src = reads(from);
+		C<Vector<StringInterval>> done = src.sync();
+		C<Vector<StringInterval>> r = readv(to);
+		check("sync " + from, done, r, cmpv);
+	}
+	
 	public static void checkSyncs() {
-		checkSync_0();
-		checkSync_1();
-		checkSync_2();
-		checkSync_3();
+		checkSync("0 a\t1 b\t2 c", "0 a\t1 b\t2 c");
+		checkSync("0 a\t0 b\t2 c", "0 a b\t2 c");
+		checkSync("0 a\t1 b\t1 c", "0 a\t1 b c");
+		checkSync("0 a\t2 b\t2 c\t3 d", "0 a \t2 b c\t3 d");
 	}
-
-	public static void checkSync_0() {
-		C<StringInterval> src = reads("0 a\t1 b\t2 c");
-		C<Vector<StringInterval>> done = src.sync();
-		C<Vector<StringInterval>> r = readv("0 a\t1 b\t2 c");
-		check("Sync sing", done, r, cmpv);
-	}
-	public static void checkSync_1() {
-		C<StringInterval> src = reads("0 a\t0 b\t2 c");
-		C<Vector<StringInterval>> done = src.sync();
-		C<Vector<StringInterval>> r = readv("0 a b\t2 c");
-		check("Sync first", done, r, cmpv);
-	}
-	public static void checkSync_2() {
-		C<StringInterval> src = reads("0 a\t1 b\t1 c");
-		C<Vector<StringInterval>> done = src.sync();
-		C<Vector<StringInterval>> r = readv("0 a\t1 b c");
-		check("Sync last", done, r, cmpv);
-	}
-	public static void checkSync_3() {
-		C<StringInterval> src = reads("0 a\t2 b\t2 c\t3 d");
-		C<Vector<StringInterval>> done = src.sync();
-		C<Vector<StringInterval>> r = readv("0 a \t2 b c\t3 d");
-		check("Sync middle", done, r, cmpv);
+	
+	/*
+	 * Unfold
+	 */
+	static void checkUnfold(String from, String to) {
+		C<Vector<StringInterval>> src = readv(from);
+		C<StringInterval> done = C.unfold(src);
+		C<StringInterval> r = reads(to);
+		check("unfold " + from, done, r, cmps);
 	}
 
 	public static void checkUnfolds() {
-		checkUnfold_0();
-		checkUnfold_1();
-		checkUnfold_2();
-		checkUnfold_3();
-		checkUnfold_4();
+		checkUnfold("0 a\t1 b\t2 c", "0 a\t1 b\t2 c");
+		checkUnfold("0 a b\t2 c", "0 a\t0 b\t2 c");
+		checkUnfold("0 a\t1 b c", "0 a\t1 b\t1 c");
+		checkUnfold("0 a b c", "0 a\t0 b\t0 c");
+		checkUnfold("0 a b\t1 b c d\t2 a c", "0 a\t0 b\t1 b\t1 c\t1 d\t2 a\t2 c");
 	}
-
-	public static void checkUnfold_0() {
-		C<Vector<StringInterval>> src = readv("0 a\t1 b\t2 c");
-		C<StringInterval> done = C.unfold(src);
-		C<StringInterval> r = reads("0 a\t1 b\t2 c");
-		check("unfold sing", done, r, cmps);
-	}
-	public static void checkUnfold_1() {
-		C<Vector<StringInterval>> src = readv("0 a b\t2 c");
-		C<StringInterval> done = C.unfold(src);
-		C<StringInterval> r = reads("0 a\t0 b\t2 c");
-		check("unfold first", done, r, cmps);
-	}
-	public static void checkUnfold_2() {
-		C<Vector<StringInterval>> src = readv("0 a\t1 b c");
-		C<StringInterval> done = C.unfold(src);
-		C<StringInterval> r = reads("0 a\t1 b\t1 c");
-		check("unfold last", done, r, cmps);
-	}
-	public static void checkUnfold_3() {
-		C<Vector<StringInterval>> src = readv("0 a b c");
-		C<StringInterval> done = C.unfold(src);
-		C<StringInterval> r = reads("0 a\t0 b\t0 c");
-		check("unfold all", done, r, cmps);
-	}
-	public static void checkUnfold_4() {
-		C<Vector<StringInterval>> src = readv("0 a b\t1 b c d\t2 a c");
-		C<StringInterval> done = C.unfold(src);
-		C<StringInterval> r = reads("0 a\t0 b\t1 b\t1 c\t1 d\t2 a\t2 c");
-		check("unfold gen", done, r, cmps);
-	}
-
 
 	/*
 	 * Loop
@@ -329,79 +351,57 @@ public class Check {
 			}
 		});
 		C<StringInterval> r = reads("0 a\t1 b\t0 a\t1 b\t0 a\t1 b");
-		check(10, done, r, cmps);
+		check("loop", done, r, cmps);
 	}
 
 	/*
 	 * compressBetweenOn
 	 */
-	public static void check30() {
-		C<Vector<StringInterval>> src = readv("0 a \t2 b c\t3 d");
+	static void checkCompress(String from, String to) {
+		C<Vector<StringInterval>> src = readv(from);
 		C<Vector<StringInterval>> done = C.compressBetweenOn(src);
-		C<Vector<StringInterval>> r = readv("3 a b c d");
-		check(20, done, r, cmpv);
-	}
-	public static void check31() {
-		C<Vector<StringInterval>> src = readv("0 a-\t2 b c\t3 d");
-		C<Vector<StringInterval>> done = C.compressBetweenOn(src);
-		C<Vector<StringInterval>> r = readv("-1\t0 a-\t3 b c d");
-		check(31, done, r, cmpv);
-	}
-	public static void check32() {
-		C<Vector<StringInterval>> src = readv("0 a-\t10 b- c\t20 d");
-		C<Vector<StringInterval>> done = C.compressBetweenOn(src);
-		C<Vector<StringInterval>> r = readv("-1\t0 a-\t9 \t10 b- c\t20 d");
-		check(32, done, r, cmpv);
-	}
-	public static void check33() {
-		C<Vector<StringInterval>> src = readv("0 a-\t10 b c-\t20 d");
-		C<Vector<StringInterval>> done = C.compressBetweenOn(src);
-		C<Vector<StringInterval>> r = readv("-1\t0 a-\t9 \t10 b c-\t20 d");
-		check(33, done, r, cmpv);
-	}
-	public static void check34() {
-		C<Vector<StringInterval>> src = readv("0 a-\t10 b c\t20 d-");
-		C<Vector<StringInterval>> done = C.compressBetweenOn(src);
-		C<Vector<StringInterval>> r = readv("-1\t0 a-\t10 b c\t20 d-");
-		check(34, done, r, cmpv);
-	}
-	public static void check35() {
-		C<Vector<StringInterval>> src = readv("0 a-\t10 b c\t20 d\t30 e-");
-		C<Vector<StringInterval>> done = C.compressBetweenOn(src);
-		C<Vector<StringInterval>> r = readv("-1\t0 a-\t20 b c d\t30 e-");
-		check(35, done, r, cmpv);
-	}
-	public static void check36() {
-		C<Vector<StringInterval>> src = readv("0 a-\t10 b c\t20 d-\t30 e");
-		C<Vector<StringInterval>> done = C.compressBetweenOn(src);
-		C<Vector<StringInterval>> r = readv("-1\t0 a-\t10 b c\t20 d-\t30 e");
-		check(36, done, r, cmpv);
-	}
-	public static void check37() {
-		C<Vector<StringInterval>> src = readv("0 a\t10 b- c\t20 d\t30 e");
-		C<Vector<StringInterval>> done = C.compressBetweenOn(src);
-		C<Vector<StringInterval>> r = readv("0 a\t10 b- c\t30 d e");
-		check(37, done, r, cmpv);
-	}
-	public static void check38() {
-		C<Vector<StringInterval>> src = readv("0 a\t10 b c\t20 d-\t30 e");
-		C<Vector<StringInterval>> done = C.compressBetweenOn(src);
-		C<Vector<StringInterval>> r = readv("10 a b c\t20 d-\t30 e");
-		check(38, done, r, cmpv);
-	}
-	public static void check39() {
-		C<Vector<StringInterval>> src = readv("0 a\t10 b c\t20 d\t30 e-");
-		C<Vector<StringInterval>> done = C.compressBetweenOn(src);
-		C<Vector<StringInterval>> r = readv("20 a b c d\t30 e-");
-		check(39, done, r, cmpv);
-	}
-	public static void check40() {
-		C<Vector<StringInterval>> src = readv("0 a\t10 b c-\t20 d-\t30 e");
-		C<Vector<StringInterval>> done = C.compressBetweenOn(src);
-		C<Vector<StringInterval>> r = readv("0 a\t10 b c-\t19\t20 d-\t30 e");
-		check(40, done, r, cmpv);
+		C<Vector<StringInterval>> r = readv(to);
+		check("compress " + from, done, r, cmpv);
 	}
 
-
-
+	public static void checkCompresss() {
+		checkCompress("", "0 ");
+		checkCompress("0 ", "0 ");
+		checkCompress("0 a", "0 a");
+		checkCompress("0 a b", "0 a b");
+		checkCompress("0 a \t1 b", "1 a b");
+		checkCompress("0 a \t1 b-", "0 a \t1 b- \t2");
+		checkCompress("0 a \t1 b \t2 c-", "1 a b\t2 c- \t3");
+		checkCompress("0 a-", "-1 \t0 a-\t1");
+		checkCompress("0 a- b", "-1 \t0 a- b\t1");
+		checkCompress("0 a- \t1 b", "-1 \t0 a- \t1 b");
+		checkCompress("0 a- \t2 b-", "-1 \t0 a- \t1 \t2 b- \t3");
+		checkCompress("0 a- \t1 b \t2 c-", "-1 \t0 a- \t1 b \t2 c- \t3");
+		checkCompress("0 a- \t1 b \t2 c \t3 d-", "-1 \t0 a- \t2 b c \t3 d- \t4");
+		checkCompress("0 a \t2 b c\t3 d", "3 a b c d");
+		checkCompress("0 a-\t2 b c\t3 d", "-1 \t0 a-\t3 b c d");
+		checkCompress("0 a-\t10 b- c\t20 d", "-1 \t0 a- \t9 \t10 b- c \t20 d");
+		checkCompress("0 a-\t10 b c-\t20 d", "-1 \t0 a- \t9 \t10 b c- \t20 d");
+		checkCompress("0 a-\t10 b c\t20 d-", "-1 \t0 a- \t10 b c \t20 d- \t21");
+		checkCompress("0 a-\t10 b c\t20 d\t30 e-", "-1\t0 a-\t20 b c d\t30 e- \t31");
+		checkCompress("0 a\t10 b c\t20 d-\t30 e", "10 a b c \t20 d- \t30 e");
+		checkCompress("0 a\t10 b c\t20 d\t30 e-", "20 a b c d \t30 e- \t31");
+		checkCompress("0 a\t10 b c-\t20 d-\t30 e", "0 a\t10 b c-\t19\t20 d-\t30 e");
+	}
+	
+	/*
+	 * unmeet
+	 */
+	static void checkUnmeet(String from, String to) {
+		C<Vector<StringInterval>> src = readv(from);
+		C<Vector<StringInterval>> done = C.unmeet(src);
+		C<Vector<StringInterval>> r = readv(to);
+		check("unmeet " + from, done, r, cmpv);
+	}
+	
+	public static void checkUnmeets() {
+		checkUnmeet("", "");
+		checkUnmeet("0 x", "0 x");
+		checkUnmeet("0 x \t1 a- \t3 \t4 a+ b-", "0 x \t1 a- \t3 a+ \t4 b-");
+	}
 }

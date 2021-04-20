@@ -12,11 +12,12 @@ import fr.inria.lognet.sos.shape.Label;
 import fr.inria.lognet.sos.shape.Slicer;
 import fr.inria.lognet.sos.shape.Wrapper;
 import fr.inria.midifileperformer.Lib;
-import fr.inria.midifileperformer.Midi;
-import fr.inria.midifileperformer.MidiMsg;
 import fr.inria.midifileperformer.core.C;
 import fr.inria.midifileperformer.core.Event;
 import fr.inria.midifileperformer.core.Record;
+import fr.inria.midifileperformer.impl.Config;
+import fr.inria.midifileperformer.impl.Midi;
+import fr.inria.midifileperformer.impl.MidiMsg;
 
 public class Expert extends Wrapper {
 	MetaPlayer master;
@@ -31,7 +32,7 @@ public class Expert extends Wrapper {
 	Label startLabel;
 	Label stopLabel;
 
-	public Expert(MetaPlayer master, PlayerConfig config) {
+	public Expert(MetaPlayer master, Config config) {
 		this.master = master;
 		//this.config = config.copy();
 		Pair<Vector<M1>,Vector<M2>> objs = getSteps(config);
@@ -70,7 +71,7 @@ public class Expert extends Wrapper {
 		});
 	}
 
-	Pair<Vector<M1>,Vector<M2>> getSteps(PlayerConfig config) {
+	Pair<Vector<M1>,Vector<M2>> getSteps(Config config) {
 		C<MidiMsg> cin = Midi.readMidi(config.filename);
 		Record<MidiMsg> rin = new Record<MidiMsg>(cin);
 		C<Vector<MidiMsg>> partition = Lib.stdAnalysis(rin, config.unmeet);

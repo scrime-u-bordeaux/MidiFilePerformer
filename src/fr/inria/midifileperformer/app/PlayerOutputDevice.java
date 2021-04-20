@@ -1,7 +1,8 @@
 package fr.inria.midifileperformer.app;
 
-import fr.inria.midifileperformer.MidiMsg;
 import fr.inria.midifileperformer.core.Event;
+import fr.inria.midifileperformer.impl.MidiMsg;
+import fr.inria.midifileperformer.impl.OutputDevice;
 
 public class PlayerOutputDevice extends OutputDevice {
 	static String myName = "Player area";
@@ -10,10 +11,9 @@ public class PlayerOutputDevice extends OutputDevice {
 	public PlayerOutputDevice(PlayerZone player) {
 		this.player = player;
 	}
-
-	public static OutputDevice byName(PlayerZone player, String name) {
-		if(name.compareTo(myName) == 0) return(new PlayerOutputDevice(player));
-		return(null);
+	
+	public static void launch(PlayerZone player) {
+		devices.put(myName, new PlayerOutputDevice(player));
 	}
 
 	public boolean same(OutputDevice dev) {

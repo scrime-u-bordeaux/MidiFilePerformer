@@ -3,19 +3,30 @@ package fr.inria.midifileperformer.core;
 import java.util.Vector;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import fr.inria.fun.Fun0;
 import fr.inria.midifileperformer.Lib;
 
 public abstract class S<T> {
-	public abstract T get();
+	public abstract T get() throws EndOfStream;
 
 	/*
-	 * Generic Chronology construction based on functions
+	 * Infinite Stream
 	 */
-	public static <T> S<T> makeS(Fun0<T> get) {
+	public static <T> S<T> infinite(T value) {
 		return(new S<T>() {
 			public T get() {
-				return(get.operation());
+				return(value);
+			};
+		});
+	}
+
+	/*
+	 * Metronome
+	 */
+	public static <T> S<T> clockS(int ms, T value) {
+		return(new S<T>() {
+			public T get() {
+				Lib.sleep(ms);
+				return(value);
 			};
 		});
 	}
@@ -24,24 +35,23 @@ public abstract class S<T> {
 	 * force
 	 */
 	public void force() {
-		while(get() != null);
+		try {
+			while(true) get();
+		} catch (EndOfStream e) {
+		}
 	}
 
 	/*
-	 * Infinite Stream
+	 * Transform to a Chronology where the "present" is inserted at "get"
 	 */
-	public static <T> S<T> infinite(T value) {
-		return(makeS(() -> value));
-	}
-
-	/*
-	 * Metronome
-	 */
-	public static <T> S<T> clockS(int ms, T value) {
-		return(makeS(() -> {
-			Lib.sleep(ms);
-			return(value);
-		}));
+	public C<T> live() {
+		S<T> me = this;
+		return(new C<T>() {
+			public Event<T> get() throws EndOfStream {
+				T value = me.get();
+				return(Event.make(System.currentTimeMillis(), value));
+			};
+		});
 	}
 
 	/*
@@ -51,27 +61,13 @@ public abstract class S<T> {
 		LinkedBlockingQueue<T1> hub = new LinkedBlockingQueue<T1>();
 		for( Producer<T1> in : inputs ) in.accept(hub);
 		return(new S<T1>() {
-			public T1 get() {
+			public T1 get() throws EndOfStream {
 				try {
 					return(hub.take());
 				} catch (Exception e) {
-					return(null);
+					throw(new EndOfStream("Queue is broken"));
 				}
 			}
-		});
-	}
-
-	/*
-	 * Transform to a Chronology where the "present" is inserted at "get"
-	 */
-	public C<T> live() {
-		S<T> me = this;
-		return(new C<T>() {
-			public Event<T> get() {
-				T value = me.get();
-				if(value == null) return(null);
-				return(Event.make(System.currentTimeMillis(), value));
-			};
 		});
 	}
 

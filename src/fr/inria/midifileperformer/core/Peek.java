@@ -13,16 +13,20 @@ public class Peek<T> extends C<T> {
 		return(new Peek<T>(master));
 	}
 
-	public Event<T> get() {
+	/*
+	 * The contract is that if peek() not fails, then
+	 * get() must not fails 
+	 */
+	public Event<T> get() throws EndOfStream  {
 		if(!aheaded) return(master.get());
 		aheaded = false;
 		return(ahead);
 	}
 
-	public Event<T> peek() {
+	public Event<T> peek() throws EndOfStream {
 		if(!aheaded) { 
-			aheaded = true;
 			ahead = master.get();
+			aheaded = true;
 		}
 		return(ahead);
 	}
