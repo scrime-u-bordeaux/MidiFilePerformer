@@ -2,6 +2,7 @@ package fr.inria.midifileperformer;
 
 import java.util.Vector;
 
+import fr.inria.bps.base.Event;
 import fr.inria.fun.Fun0;
 import fr.inria.fun.Fun1;
 import fr.inria.fun.Fun2;
@@ -9,7 +10,6 @@ import fr.inria.fun.Fun3;
 import fr.inria.midifileperformer.core.C;
 import fr.inria.midifileperformer.core.Consumer;
 import fr.inria.midifileperformer.core.EndOfStream;
-import fr.inria.midifileperformer.core.Event;
 import fr.inria.midifileperformer.core.Peek;
 import fr.inria.midifileperformer.impl.StringInterval;
 

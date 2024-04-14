@@ -1,8 +1,8 @@
 package fr.inria.midifileperformer.core;
 
-import java.util.Vector;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import fr.inria.bps.base.Event;
 import fr.inria.midifileperformer.Lib;
 
 public abstract class S<T> {
@@ -49,6 +49,7 @@ public abstract class S<T> {
 		return(new C<T>() {
 			public Event<T> get() throws EndOfStream {
 				T value = me.get();
+				//System.out.println("main get "+value);
 				return(Event.make(System.currentTimeMillis(), value));
 			};
 		});
@@ -57,13 +58,14 @@ public abstract class S<T> {
 	/*
 	 * collect
 	 */
-	public static <T1,T extends Producer<T1>> S<T1> collect(Vector<T> inputs) {
-		LinkedBlockingQueue<T1> hub = new LinkedBlockingQueue<T1>();
-		for( Producer<T1> in : inputs ) in.accept(hub);
-		return(new S<T1>() {
-			public T1 get() throws EndOfStream {
+	public static <T> S<T> collect(LinkedBlockingQueue<T> hub) {
+		return(new S<T>() {
+			public T get() throws EndOfStream {
 				try {
-					return(hub.take());
+					//System.out.println("collect");
+					T obj = hub.take();
+					//System.out.println("collected "+obj);
+					return(obj);
 				} catch (Exception e) {
 					throw(new EndOfStream("Queue is broken"));
 				}

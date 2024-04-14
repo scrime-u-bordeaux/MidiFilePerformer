@@ -2,7 +2,9 @@ package fr.inria.midifileperformer.core;
 
 import java.util.Vector;
 
+import fr.inria.bps.base.Event;
 import fr.inria.bps.base.Pair;
+import fr.inria.bps.base.Vecteur;
 import fr.inria.fun.Fun0;
 import fr.inria.fun.Fun1;
 import fr.inria.fun.Fun3;
@@ -19,6 +21,20 @@ public abstract class C<T> extends S<Event<T>> {
 				throw(new EndOfStream("The empty stream"));
 			};
 		});
+	}
+	
+	/*
+	 * Conversion to H
+	 */
+	public H<T> toH() {
+		H<T> r = new H<T>();
+		try {
+			while(true) {
+				r.add(get());
+			}
+		} catch(EndOfStream e) {
+		}
+		return(r);
 	}
 
 	/*
@@ -58,22 +74,15 @@ public abstract class C<T> extends S<Event<T>> {
 
 
 	/*
-	 * Collect
-	 */
-
-	public static <T1,T extends Producer<T1>> C<T1> collector(Vector<T> inputs) {
-		return(collect(inputs).live());
-	}
-
-	/*
 	 * Distribute
 	 */
 	public <T1 extends Consumer<Event<T>>> void distribute(Vector<T1> outputs) {
 		try {
 			while(true) {
 				Event<T> event = get();
-				for(Consumer<Event<T>> cons : outputs)
+				for(Consumer<Event<T>> cons : outputs) {
 					cons.accept(event);
+				}
 			}
 		} catch (EndOfStream e) {
 		}
@@ -125,6 +134,64 @@ public abstract class C<T> extends S<Event<T>> {
 				return(r);
 			};
 		});
+	}
+
+	/*
+	 * count
+	 */
+	public Vector<Event<T>> count(Fun1<Event<T>,Boolean> f, int n) throws EndOfStream {
+		Peek<T> me = new Peek<T>(this);
+		Vector<Event<T>> r = new Vector<Event<T>>();
+		Event<T> ev = me.peek();
+		int count = 0;
+		try {
+			while(true) {
+				if(f.operation(ev)) {
+					count++;
+					if(count >= n) return(r);
+				}
+				r.add(ev);
+				ev = me.nextPeek();
+			}
+		} catch(EndOfStream e) {
+		}
+		return(r);
+	}
+
+	/*
+	 * collectTo
+	 */
+	public Vector<Event<T>> collectTo(Fun1<Event<T>,Boolean> f) throws EndOfStream {
+		Peek<T> me = new Peek<T>(this);
+		Vector<Event<T>> r = new Vector<Event<T>>();
+		Event<T> ev = me.peek();
+		try {
+			while(!(f.operation(ev))) {
+				r.add(ev);
+				ev = me.nextPeek();
+			}
+		} catch(EndOfStream e) {
+		}
+		return(r);
+	}
+
+	/*
+	 * getAndCollectTo
+	 */
+	public Vector<Event<T>> getAndCollectTo(Fun1<Event<T>,Boolean> f) throws EndOfStream {
+		Peek<T> me = new Peek<T>(this);
+		Vector<Event<T>> r = new Vector<Event<T>>();
+		Event<T> ev = me.peek();
+		try {
+			r.add(ev);
+			ev=me.nextPeek();
+			while(!(f.operation(ev))) {
+				r.add(ev);
+				ev = me.nextPeek();
+			}
+		} catch(EndOfStream e) {
+		}
+		return(r);
 	}
 
 	/*
@@ -260,6 +327,55 @@ public abstract class C<T> extends S<Event<T>> {
 	}
 
 	/*
+	 * uncompressBetweenOn
+	 */ 
+	public static <T extends Interval> C<Vector<Event<T>>> uncompressBetweenOn(C<Vector<T>> master) {
+		Peek<Vector<T>> pc = Peek.make(master);
+		return(new C<Vector<Event<T>>>() {
+			boolean init = false;
+			boolean toggle = false;
+			long lastOn = -1;
+			public Event<Vector<Event<T>>> get() throws EndOfStream {
+				if(!init) {
+					init = true;
+					// force a first event to be without Begin
+					Event<Vector<Event<T>>> r = collectToBegin();
+					return(r);
+				}
+				toggle = !toggle;
+				if(toggle) {
+					Event<Vector<T>> event = pc.get();
+					lastOn = event.time;
+					return(event.convert(v -> Lib.reStart(lastOn, v)));
+				} else {
+					return(collectToBegin());
+				}
+			}
+			Event<Vector<Event<T>>> collectToBegin() {
+				Vector<Event<T>> r = new Vector<Event<T>>();
+				try {
+					Event<Vector<T>> ev = pc.peek();
+					long firsttime = ev.time;
+					try {
+						while(!Interval.hasBegin(ev.value)) {
+							long curtime = ev.time;
+							pc.get();
+							r.addAll(Vecteur.map(ev.value, v -> Event.make(curtime, v)));
+							ev = pc.peek();
+						}
+					} catch (EndOfStream e) {
+					}
+					return(Event.make(firsttime, r));
+				} catch (EndOfStream e) {
+					return(Event.make(lastOn+1, r));
+				}
+			}
+		});
+	}
+
+
+
+	/*
 	 * The transformation of Jean
 	 */
 	public static <T extends Interval & SameEvent<T>> C<Vector<T>> unmeet(C<Vector<T>> master) {
@@ -297,6 +413,92 @@ public abstract class C<T> extends S<Event<T>> {
 						}
 					}
 				}
+			}
+		});
+	}
+
+	/*
+	 * The transformation of Jean
+	 */
+	public static <T extends Interval & SameEvent<T>> C<Vector<Event<T>>> ununmeet(C<Vector<Event<T>>> master) {
+		Peek<Vector<Event<T>>> c = Peek.make(master);
+		return(new C<Vector<Event<T>>>() {
+			boolean toggle = true;
+			Vector<Event<T>> lastBegin = null;
+			public Event<Vector<Event<T>>> get() throws EndOfStream {
+				Event<Vector<Event<T>>> event = c.get();
+				toggle = !toggle;
+				if(toggle) {
+					lastBegin = event.value;
+					return(event);
+				}
+				try {
+					Event<Vector<Event<T>>> nextBegin = c.peek();
+					if(nextBegin == null) return(event);
+					if((lastBegin != null) && event.value.size() == 0)
+						filterX(event.value, nextBegin.value);
+				} catch (EndOfStream e) {
+				}
+				return(event);
+			}
+			void filterX(Vector<Event<T>> E, Vector<Event<T>> nextB) {
+				// lastBegin=(..x..) E nextB=(..-x..) => (..x..) E+-x (....)
+				for(Event<T> x : lastBegin) {
+					if(x.value.isBegin()) {
+						for(int i=0; i<nextB.size(); ) {
+							Event<T> y = nextB.get(i);
+							if(y.value.isEnd() && y.time == 0 && x.value.correspond(y.value)) {
+								nextB.remove(i);
+								E.add(y);
+							} else {
+								i++;
+							}
+						}
+					}
+				}
+			}
+		});
+	}
+
+	/*
+	 * compressBeat
+	 */ 
+	public static <T> C<Vector<Event<T>>> compressBeat(C<T> master, int beat) {
+		Peek<T> pc = Peek.make(master);
+		return(new C<Vector<Event<T>>>() {
+			long bbeat = 0;
+			long ebeat = beat;
+			boolean init = false;
+			boolean toggle = false;
+			public Event<Vector<Event<T>>> get() throws EndOfStream {
+				if(!init) {
+					init = true;
+					// force a first event to be without Begin
+					return(Event.start(new Vector<Event<T>>(0)));
+				}
+				toggle = !toggle;
+				if(toggle) {
+					return(collectToBeat(bbeat, ebeat));
+				} else {
+					bbeat = ebeat;
+					ebeat = bbeat + beat; 
+					return(Event.make(bbeat, new Vector<Event<T>>(0)));
+				}
+			}
+			Event<Vector<Event<T>>> collectToBeat(long bbeat, long ebeat) throws EndOfStream {
+				Vector<Event<T>> r = new Vector<Event<T>>();
+				Event<T> ev = pc.peek();
+				try {
+					while(ev.time < ebeat) {
+						pc.get();
+						System.out.println("Beat "+bbeat+" "+ev+" "+ebeat);
+
+						r.add(ev);
+						ev = pc.peek();
+					}
+				} catch (EndOfStream e) {
+				}
+				return(Event.make(bbeat, r));
 			}
 		});
 	}

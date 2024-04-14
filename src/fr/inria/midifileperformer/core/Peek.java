@@ -1,5 +1,7 @@
 package fr.inria.midifileperformer.core;
 
+import fr.inria.bps.base.Event;
+
 public class Peek<T> extends C<T> {
 	C<T> master;
 	boolean aheaded = false;
@@ -29,5 +31,10 @@ public class Peek<T> extends C<T> {
 			aheaded = true;
 		}
 		return(ahead);
+	}
+	
+	public Event<T> nextPeek() throws EndOfStream {
+		get();
+		return(peek());
 	}
 }

@@ -2,6 +2,7 @@ package fr.inria.midifileperformer.app;
 
 import java.util.Vector;
 
+import fr.inria.bps.base.Event;
 import fr.inria.bps.base.Pair;
 import fr.inria.bps.base.Vecteur;
 import fr.inria.lognet.sos.Shape;
@@ -11,16 +12,13 @@ import fr.inria.lognet.sos.event.SelectEvent;
 import fr.inria.lognet.sos.shape.Label;
 import fr.inria.lognet.sos.shape.Slicer;
 import fr.inria.lognet.sos.shape.Wrapper;
-import fr.inria.midifileperformer.Lib;
 import fr.inria.midifileperformer.core.C;
-import fr.inria.midifileperformer.core.Event;
-import fr.inria.midifileperformer.core.Record;
 import fr.inria.midifileperformer.impl.Config;
-import fr.inria.midifileperformer.impl.Midi;
 import fr.inria.midifileperformer.impl.MidiMsg;
+import fr.inria.midifileperformer.impl.MidiRendering;
 
 public class Expert extends Wrapper {
-	MetaPlayer master;
+	Configurator master;
 	//PlayerConfig config;
 	Vector<MidiMsg> midiEvents;
 	Vector<Vector<MidiMsg>> stepEvents;
@@ -32,7 +30,7 @@ public class Expert extends Wrapper {
 	Label startLabel;
 	Label stopLabel;
 
-	public Expert(MetaPlayer master, Config config) {
+	public Expert(Configurator master, Config config) {
 		this.master = master;
 		//this.config = config.copy();
 		Pair<Vector<M1>,Vector<M2>> objs = getSteps(config);
@@ -72,12 +70,11 @@ public class Expert extends Wrapper {
 	}
 
 	Pair<Vector<M1>,Vector<M2>> getSteps(Config config) {
-		C<MidiMsg> cin = Midi.readMidi(config.filename);
-		Record<MidiMsg> rin = new Record<MidiMsg>(cin);
-		C<Vector<MidiMsg>> partition = Lib.stdAnalysis(rin, config.unmeet);
-		Record<Vector<MidiMsg>> rp = new Record<Vector<MidiMsg>>(partition);
-		rp.force();
-		return(Pair.cons(cvt1(rin.recorded), cvt2(rp.recorded)));
+		Vector<Event<MidiMsg>> v = MidiRendering.readv(config.filename.toString());
+		//C<MidiMsg> cin = Midi.readMidi(config.filename);
+		C<MidiMsg> cin = C.make(v);
+		C<Vector<Event<MidiMsg>>> acin = MidiRendering.doAnalysis(config, cin);
+		return(Pair.cons(cvt1(v), cvt2(acin.toH().values)));
 	}
 
 	Vector<M1> cvt1(Vector<Event<MidiMsg>> v) {
@@ -86,9 +83,9 @@ public class Expert extends Wrapper {
 		return(r);
 	}
 
-	Vector<M2> cvt2(Vector<Event<Vector<MidiMsg>>> v) {
+	Vector<M2> cvt2(Vector<Event<Vector<Event<MidiMsg>>>> v) {
 		Vector<M2> r = new Vector<M2>(v.size());
-		for(Event<Vector<MidiMsg>> e : v) r.add(new M2(e));
+		for(Event<Vector<Event<MidiMsg>>> e : v) r.add(new M2(e));
 		return(r);
 	}
 
@@ -101,6 +98,7 @@ public class Expert extends Wrapper {
 	}
 
 	void startStep() {
+		System.out.println("Here "+midis.height);
 		M2 o = (M2) steps.selected();
 		startLabel.reset(""+o.e.time);
 	}
@@ -146,22 +144,22 @@ class M1 {
 }
 
 class M2 {
-	Event<Vector<MidiMsg>> e;
-	public M2(Event<Vector<MidiMsg>> e) {
+	Event<Vector<Event<MidiMsg>>> e;
+	public M2(Event<Vector<Event<MidiMsg>>> e) {
 		this.e = e;
 	}
 	public Vector<M1> convert() {
-		long time = e.time;
-		Vector<MidiMsg> v = e.value;
+		//long time = e.time;
+		Vector<Event<MidiMsg>> v = e.value;
 		int n = v.size();
 		Vector<M1> r = new Vector<M1>(n);
-		for( MidiMsg m : v ) r.add(new M1(Event.make(time, m)));
+		for( Event<MidiMsg> m : v ) r.add(new M1(m));
 		return(r);
 
 	}
 	public String toString() {
 		long time = e.time;
-		Vector<MidiMsg> v = e.value;
+		Vector<Event<MidiMsg>> v = e.value;
 		String vals = "";
 		int n = v.size();
 		if(n > 0) {

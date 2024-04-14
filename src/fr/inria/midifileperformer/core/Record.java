@@ -2,22 +2,23 @@ package fr.inria.midifileperformer.core;
 
 import java.util.Vector;
 
-public class Record<T> extends C<T> {
+import fr.inria.bps.base.Event;
+
+public class Record<T> {
 	public Vector<Event<T>> recorded = new Vector<Event<T>>();
-	C<T> master;
+	// We don't need master anymore
+	//C<T> master;
 
-	public Record(C<T> master) {
-		this.master = master;
+	public Record() {
 	}
 
-	public static <T> Record<T> make(C<T> master) {
-		return(new Record<T>(master));
+	public static <T> Record<T> make() {
+		return(new Record<T>());
 	}
-
-	public Event<T> get() throws EndOfStream {
-		Event<T> r = master.get();
-		recorded.add(r);
-		return(r);
+	
+	public void addNow(T value) {
+		//System.out.println("record "+value);
+		recorded.add(Event.now(value));
 	}
 
 }
